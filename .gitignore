@@ -19,3 +19,7 @@ build/
 .coverage
 htmlcov/
 alembic/versions/__pycache__/
+logs/
+check_*.jpg
+preview_*.png
+mobileclip_blt.ts

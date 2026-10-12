@@ -28,6 +28,11 @@ def jog(payload: dict, svc: TaskService = Depends(task_service)):
     return svc.jog(payload)
 
 
+@router.post("/cmd_vel")
+def cmd_vel(payload: dict, svc: TaskService = Depends(task_service)):
+    return svc.cmd_vel(payload)
+
+
 @router.post("/navigate")
 def navigate(payload: dict, svc: TaskService = Depends(task_service)):
     return svc.navigate(payload)

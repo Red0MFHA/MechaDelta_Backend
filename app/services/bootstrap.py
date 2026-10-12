@@ -13,16 +13,30 @@ from app.services.mappers import DEFAULT_CAPABILITIES
 
 def ensure_default_source(db: Session, settings: Settings) -> None:
     repo = SourceRepository(db)
-    if repo.get(settings.default_source_id):
-        return
+    existing = repo.get(settings.default_source_id)
     now = utcnow()
+    if existing:
+        # Keep the seeded source aimed at the live perception symlink, not fixtures.
+        changed = False
+        if existing.active_run_id != "latest":
+            existing.active_run_id = "latest"
+            changed = True
+        if existing.connection_state != "online":
+            existing.connection_state = "online"
+            changed = True
+        if changed:
+            existing.updated_at = now
+            existing.last_seen_at = now
+            db.add(existing)
+            db.commit()
+        return
     row = SourceRow(
         id=settings.default_source_id,
         name="Gazebo demo robot",
         kind="ros2_simulation",
         connection_state="online",
         origin="simulated",
-        description="Default simulation source bound to the fixture or latest MechaDelta run.",
+        description="Gazebo + perception source; active run follows mechadelta_ws/runs/latest.",
         config_json=json.dumps(
             [
                 {"key": "runsRoot", "label": "Runs root", "value": str(settings.mechadelta_runs_root), "secret": False},
@@ -30,7 +44,7 @@ def ensure_default_source(db: Session, settings: Settings) -> None:
             ]
         ),
         capabilities_json=json.dumps(DEFAULT_CAPABILITIES),
-        active_run_id=settings.default_run_id,
+        active_run_id="latest",
         last_seen_at=now,
         created_at=now,
         updated_at=now,

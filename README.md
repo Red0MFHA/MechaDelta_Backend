@@ -41,11 +41,58 @@ docker compose up -d db
 # in .env: FORCE_SQLITE=0 and DATABASE_URL=postgresql+psycopg://mechadelta:mechadelta@localhost:5432/mechadelta
 ```
 
-## Live simulation
+## Live simulation (camera + YOLO overlay in the UI)
 
-1. Launch MechaDelta as usual (`run_transition_poc.sh`).
-2. Set `MECHADELTA_RUNS_ROOT` to that workspace’s `runs/` directory.
-3. Run `python -m ros_bridge.node` in a ROS-sourced shell (falls back to the stub if rclpy is missing).
+Use **four terminals**. Keep the UI on Node 22 (`fnm use 22`).
+
+**1. Simulation** (Gazebo + perception — publishes `/camera/color/image_raw` and `/perception/image_annotated`):
+
+```bash
+cd ~/FYP/MechaDelta   # or ~/mechadelta_ws
+source /opt/ros/$ROS_DISTRO/setup.bash
+source install/setup.bash   # after colcon build
+./run_transition_poc.sh --fps 8
+```
+
+**2. Live ROS bridge** (must use the same ROS env as the sim; replaces the stub):
+
+```bash
+# stop any old stub on :8765 first
+fuser -k 8765/tcp 2>/dev/null
+cd ~/FYP/MechaDelta_Backend
+source /opt/ros/$ROS_DISTRO/setup.bash
+source /path/to/MechaDelta/install/setup.bash
+# system/ROS Python needs cv_bridge + the backend deps, or:
+#   /opt/ros/$ROS_DISTRO/bin/python -m pip install --user fastapi uvicorn pillow numpy httpx
+python3 -m ros_bridge.live_node
+# health should show "mode":"ros" and cameraFresh true once images flow
+curl -s http://127.0.0.1:8765/health
+```
+
+**3. Backend API** — point at the sim `runs/` folder:
+
+```bash
+cd ~/FYP/MechaDelta_Backend
+# edit .env:
+#   MECHADELTA_RUNS_ROOT=/absolute/path/to/MechaDelta/runs
+#   BRIDGE_URL=http://127.0.0.1:8765
+source .venv/bin/activate
+fuser -k 8000/tcp 2>/dev/null
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+**4. UI** (`NEXT_PUBLIC_DATA_MODE=http`, API `http://localhost:8000`):
+
+```bash
+fnm use 22
+cd ~/FYP/MechaDeltaUI
+npm run dev
+```
+
+In the app: **Robots → Gazebo demo robot → Connect**, then open **Patrol**.  
+`MediaInfo.url` is `.../camera.jpg?view=annotated` (YOLO overlay). Use `view=raw` for the plain camera.
+
+Without a running sim, `python -m ros_bridge.node` / `stub_server` still serves fake frames.
 
 ## Architecture
 

@@ -7,6 +7,7 @@ from app.controllers import (
     events_controller,
     health_controller,
     ingest_controller,
+    livekit_controller,
     media_controller,
     memory_controller,
     objects_controller,
@@ -32,4 +33,5 @@ def build_api_router() -> APIRouter:
     api.include_router(runtime_controller.router)
     api.include_router(tasks_controller.router)
     api.include_router(ingest_controller.router)
+    api.include_router(livekit_controller.router)
     return api

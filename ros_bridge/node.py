@@ -1,8 +1,4 @@
-"""ROS bridge entrypoint.
-
-Uses the stub server when rclpy is unavailable. Replace the body of `run_ros`
-with the real subscriptions when running inside a sourced ROS workspace.
-"""
+"""ROS bridge entrypoint: live node when rclpy is available, else stub."""
 
 from __future__ import annotations
 
@@ -17,10 +13,10 @@ def main() -> None:
         stub_main()
         return
 
-    print("rclpy available — stub still used until full node is wired; starting stub on :8765")
-    from ros_bridge.stub_server import main as stub_main
+    print("rclpy available — starting LIVE bridge on :8765")
+    from ros_bridge.live_node import main as live_main
 
-    stub_main()
+    live_main()
 
 
 if __name__ == "__main__":

@@ -45,6 +45,13 @@ class BridgeClient:
     def jog(self, direction: str) -> dict:
         return self._request("POST", "/jog", {"direction": direction})
 
+    def cmd_vel(self, linear_x: float, angular_z: float, hold_s: float = 0.45) -> dict:
+        return self._request(
+            "POST",
+            "/cmd_vel",
+            {"linearX": linear_x, "angularZ": angular_z, "holdS": hold_s},
+        )
+
     def navigate(self, x: float, y: float, yaw: float = 0.0, frame_id: str = "map") -> dict:
         return self._request(
             "POST",
@@ -64,3 +71,19 @@ class BridgeClient:
             return res.content
         except httpx.HTTPError:
             return None
+
+    async def camera_jpeg_async(self, view: str = "annotated") -> bytes | None:
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                if view in ("rviz", "map"):
+                    res = await client.get(f"{self.base_url}/rviz.jpg")
+                else:
+                    res = await client.get(f"{self.base_url}/camera.jpg", params={"view": view})
+            if res.status_code != 200:
+                return None
+            return res.content
+        except httpx.HTTPError:
+            return None
+
+    async def rviz_jpeg_async(self) -> bytes | None:
+        return await self.camera_jpeg_async("rviz")

@@ -50,6 +50,17 @@ class TaskService:
             raise AppError("not_found", f"Task {task_id} was not found.", status_code=404)
         return json.loads(row.task_json)
 
+    def cmd_vel(self, request: dict) -> dict:
+        """Streaming teleop — no task row (joystick sends this many times per second)."""
+        self.ctx.source(request["sourceId"])
+        try:
+            linear_x = float(request.get("linearX") or 0)
+            angular_z = float(request.get("angularZ") or 0)
+        except (TypeError, ValueError) as exc:
+            raise AppError("validation_error", "linearX and angularZ must be numbers") from exc
+        result = self.bridge.cmd_vel(linear_x, angular_z)
+        return {"ok": True, "pose": (result or {}).get("pose")}
+
     def jog(self, request: dict) -> dict:
         source = self.ctx.source(request["sourceId"])
         direction = request["direction"]
@@ -101,11 +112,13 @@ class TaskService:
             target["y"] = loc.get("y") if loc.get("y") is not None else target.get("y")
             target["label"] = target.get("label") or loc.get("support")
             target["locationObservedAt"] = loc.get("observedAt")
-            # Fallback table waypoints if xyz missing
-            if target.get("x") is None and loc.get("support") == "Table-A":
-                target["x"], target["y"] = 2.65, 1.4
-            if target.get("x") is None and loc.get("support") == "Table-B":
-                target["x"], target["y"] = 8.85, 1.4
+            # Fallback: approach pose from live layout.yaml when xyz missing
+            if target.get("x") is None and loc.get("support"):
+                from app.services.layout_map import table_approach
+
+                approach = table_approach(str(loc["support"]))
+                if approach:
+                    target["x"], target["y"] = approach
         if target.get("x") is None or target.get("y") is None:
             raise AppError("validation_error", "Navigate target is missing x/y.")
         now = utcnow()

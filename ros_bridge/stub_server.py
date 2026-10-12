@@ -71,6 +71,17 @@ def jog(payload: dict):
     return {"ok": True, "pose": snapshot()["pose"]}
 
 
+@app.post("/cmd_vel")
+def cmd_vel(payload: dict):
+    linear_x = float(payload.get("linearX") or 0)
+    angular_z = float(payload.get("angularZ") or 0)
+    dt = 0.1
+    STATE["yaw"] += angular_z * dt
+    STATE["x"] += linear_x * math.cos(STATE["yaw"]) * dt
+    STATE["y"] += linear_x * math.sin(STATE["yaw"]) * dt
+    return {"ok": True, "pose": snapshot()["pose"]}
+
+
 @app.post("/navigate")
 def navigate(payload: dict):
     STATE["x"] = float(payload["x"])

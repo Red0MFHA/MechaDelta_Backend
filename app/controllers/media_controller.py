@@ -31,21 +31,39 @@ def pose(source_id: str, svc: MediaService = Depends(media_service)):
 
 @router.get("/sources/{source_id}/lidar")
 def lidar(source_id: str, svc: MediaService = Depends(media_service)):
-    return svc.lidar(source_id)
+    data = svc.lidar(source_id)
+    if data is None:
+        return Response(status_code=204)
+    return data
 
 
 @router.get("/sources/{source_id}/camera.jpg")
-def camera_jpeg(
+async def camera_jpeg(
     source_id: str,
     view: str = Query("annotated"),
     bridge: BridgeClient = Depends(bridge_dep),
 ):
-    data = bridge.camera_jpeg(view)
+    # Async so rapid UI polls do not exhaust the sync threadpool.
+    data = await bridge.camera_jpeg_async(view)
     if not data:
-        # 1x1 pixel jpeg placeholder
-        import base64
+        return Response(status_code=503, content=b"no camera frame yet")
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store", "Connection": "close"},
+    )
 
-        data = base64.b64decode(
-            "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGcP//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAQUCf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQMBAT8Bf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQIBAT8Bf//Z"
-        )
-    return Response(content=data, media_type="image/jpeg")
+
+@router.get("/sources/{source_id}/rviz.jpg")
+async def rviz_jpeg(
+    source_id: str,
+    bridge: BridgeClient = Depends(bridge_dep),
+):
+    data = await bridge.rviz_jpeg_async()
+    if not data:
+        return Response(status_code=503, content=b"no rviz frame yet")
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store", "Connection": "close"},
+    )

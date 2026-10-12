@@ -15,25 +15,48 @@ class MemoryReader:
             raise FileNotFoundError(f"No memory.db at {self.db_path}")
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
+        path = self.db_path.resolve()
+        wal = Path(f"{path}-wal")
+        # Live perception keeps pages in the WAL. Opening with immutable=1 only
+        # sees the empty main file. A normal open + query_only reads the WAL.
+        if wal.exists() and wal.stat().st_size > 0:
+            conn = sqlite3.connect(str(path), timeout=10)
+            conn.execute("PRAGMA query_only=ON")
+        else:
+            conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         return conn
 
+    def _table_exists(self, conn: sqlite3.Connection, name: str) -> bool:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            (name,),
+        ).fetchone()
+        return row is not None
+
     def identities(self) -> list[dict]:
         with self._connect() as conn:
+            if not self._table_exists(conn, "identities"):
+                return []
             return [dict(r) for r in conn.execute("SELECT * FROM identities ORDER BY id")]
 
     def states(self) -> list[dict]:
         with self._connect() as conn:
+            if not self._table_exists(conn, "states"):
+                return []
             return [dict(r) for r in conn.execute("SELECT * FROM states ORDER BY object_id")]
 
     def state(self, object_id: str) -> dict | None:
         with self._connect() as conn:
+            if not self._table_exists(conn, "states"):
+                return None
             row = conn.execute("SELECT * FROM states WHERE object_id=?", (object_id,)).fetchone()
             return dict(row) if row else None
 
     def transitions(self, object_id: str | None = None) -> list[dict]:
         with self._connect() as conn:
+            if not self._table_exists(conn, "transitions"):
+                return []
             if object_id:
                 rows = conn.execute(
                     "SELECT * FROM transitions WHERE object_id=? ORDER BY id", (object_id,)
@@ -44,6 +67,8 @@ class MemoryReader:
 
     def observations(self, object_id: str | None = None, limit: int = 500) -> list[dict]:
         with self._connect() as conn:
+            if not self._table_exists(conn, "observations"):
+                return []
             if object_id:
                 rows = conn.execute(
                     "SELECT * FROM observations WHERE object_id=? ORDER BY captured DESC LIMIT ?",
@@ -57,11 +82,17 @@ class MemoryReader:
 
     def query_object(self, object_id: str) -> dict:
         with self._connect() as conn:
-            current = conn.execute("SELECT * FROM states WHERE object_id=?", (object_id,)).fetchone()
-            previous = conn.execute(
-                "SELECT * FROM transitions WHERE object_id=? ORDER BY id DESC LIMIT 1",
-                (object_id,),
-            ).fetchone()
+            current = None
+            previous = None
+            if self._table_exists(conn, "states"):
+                current = conn.execute(
+                    "SELECT * FROM states WHERE object_id=?", (object_id,)
+                ).fetchone()
+            if self._table_exists(conn, "transitions"):
+                previous = conn.execute(
+                    "SELECT * FROM transitions WHERE object_id=? ORDER BY id DESC LIMIT 1",
+                    (object_id,),
+                ).fetchone()
             return {
                 "object_id": object_id,
                 "last_observed": dict(current) if current else None,
@@ -76,7 +107,7 @@ class MemoryReader:
         index = self.run_dir / "payloads" / "payload_index.sqlite"
         if not index.exists():
             return []
-        conn = sqlite3.connect(f"file:{index}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"file:{index.resolve().as_posix()}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         try:
             return [dict(r) for r in conn.execute("SELECT * FROM payloads ORDER BY object_id")]
