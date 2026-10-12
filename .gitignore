@@ -1,4 +1,6 @@
 .venv/
+bin/livekit-server
+bin/LICENSE
 __pycache__/
 *.py[cod]
 *.egg-info/
